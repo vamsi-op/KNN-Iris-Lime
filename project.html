@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced KNN Iris Predictor with LIME Explanations</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .tooltip {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+        
+
+        // Iris dataset
+        const irisData = [
+            // Setosa (0)
+            [5.1, 3.5, 1.4, 0.2, 0], [4.9, 3.0, 1.4, 0.2, 0], [4.7, 3.2, 1.3, 0.2, 0],
+            [4.6, 3.1, 1.5, 0.2, 0], [5.0, 3.6, 1.4, 0.2, 0], [5.4, 3.9, 1.7, 0.4, 0],
+            [4.6, 3.4, 1.4, 0.3, 0], [5.0, 3.4, 1.5, 0.2, 0], [4.4, 2.9, 1.4, 0.2, 0],
+            [4.9, 3.1, 1.5, 0.1, 0], [5.4, 3.7, 1.5, 0.2, 0], [4.8, 3.4, 1.6, 0.2, 0],
+            [4.8, 3.0, 1.4, 0.1, 0], [4.3, 3.0, 1.1, 0.1, 0], [5.8, 4.0, 1.2, 0.2, 0],
+            [5.7, 4.4, 1.5, 0.4, 0], [5.4, 3.9, 1.3, 0.4, 0], [5.1, 3.5, 1.4, 0.3, 0],
+            [5.7, 3.8, 1.7, 0.3, 0], [5.1, 3.8, 1.5, 0.3, 0], [5.4, 3.4, 1.7, 0.2, 0],
+            [5.1, 3.7, 1.5, 0.4, 0], [4.6, 3.6, 1.0, 0.2, 0], [5.1, 3.3, 1.7, 0.5, 0],
+            [4.8, 3.4, 1.9, 0.2, 0], [5.0, 3.0, 1.6, 0.2, 0], [5.0, 3.4, 1.6, 0.4, 0],
+            [5.2, 3.5, 1.5, 0.2, 0], [5.2, 3.4, 1.4, 0.2, 0], [4.7, 3.2, 1.6, 0.2, 0],
+            [4.8, 3.1, 1.6, 0.2, 0], [5.4, 3.4, 1.5, 0.4, 0], [5.2, 4.1, 1.5, 0.1, 0],
+            [5.5, 4.2, 1.4, 0.2, 0], [4.9, 3.1, 1.5, 0.2, 0], [5.0, 3.2, 1.2, 0.2, 0],
+            [5.5, 3.5, 1.3, 0.2, 0], [4.9, 3.6, 1.4, 0.1, 0], [4.4, 3.0, 1.3, 0.2, 0],
+            [5.1, 3.4, 1.5, 0.2, 0], [5.0, 3.5, 1.3, 0.3, 0], [4.5, 2.3, 1.3, 0.3, 0],
+            [4.4, 3.2, 1.3, 0.2, 0], [5.0, 3.5, 1.6, 0.6, 0], [5.1, 3.8, 1.9, 0.4, 0],
+            [4.8, 3.0, 1.4, 0.3, 0], [5.1, 3.8, 1.6, 0.2, 0], [4.6, 3.2, 1.4, 0.2, 0],
+            [5.3, 3.7, 1.5, 0.2, 0], [5.0, 3.3, 1.4, 0.2, 0],
+            
+            // Versicolor (1)
+            [7.0, 3.2, 4.7, 1.4, 1], [6.4, 3.2, 4.5, 1.5, 1], [6.9, 3.1, 4.9, 1.5, 1],
+            [5.5, 2.3, 4.0, 1.3, 1], [6.5, 2.8, 4.6, 1.5, 1], [5.7, 2.8, 4.5, 1.3, 1],
+            [6.3, 3.3, 4.7, 1.6, 1], [4.9, 2.4, 3.3, 1.0, 1], [6.6, 2.9, 4.6, 1.3, 1],
+            [5.2, 2.7, 3.9, 1.4, 1], [5.0, 2.0, 3.5, 1.0, 1], [5.9, 3.0, 4.2, 1.5, 1],
+            [6.0, 2.2, 4.0, 1.0, 1], [6.1, 2.9, 4.7, 1.4, 1], [5.6, 2.9, 3.6, 1.3, 1],
+            [6.7, 3.1, 4.4, 1.4, 1], [5.6, 3.0, 4.5, 1.5, 1], [5.8, 2.7, 4.1, 1.0, 1],
+            [6.2, 2.2, 4.5, 1.5, 1], [5.6, 2.5, 3.9, 1.1, 1], [5.9, 3.2, 4.8, 1.8, 1],
+            [6.1, 2.8, 4.0, 1.3, 1], [6.3, 2.5, 4.9, 1.5, 1], [6.1, 2.8, 4.7, 1.2, 1],
+            [6.4, 2.9, 4.3, 1.3, 1], [6.6, 3.0, 4.4, 1.4, 1], [6.8, 2.8, 4.8, 1.4, 1],
+            [6.7, 3.0, 5.0, 1.7, 1], [6.0, 2.9, 4.5, 1.5, 1], [5.7, 2.6, 3.5, 1.0, 1],
+            [5.5, 2.4, 3.8, 1.1, 1], [5.5, 2.4, 3.7, 1.0, 1], [5.8, 2.7, 3.9, 1.2, 1],
+            [6.0, 2.7, 5.1, 1.6, 1], [5.4, 3.0, 4.5, 1.5, 1], [6.0, 3.4, 4.5, 1.6, 1],
+            [6.7, 3.1, 4.7, 1.5, 1], [6.3, 2.3, 4.4, 1.3, 1], [5.6, 3.0, 4.1, 1.3, 1],
+            [5.5, 2.5, 4.0, 1.3, 1], [5.5, 2.6, 4.4, 1.2, 1], [6.1, 3.0, 4.6, 1.4, 1],
+            [5.8, 2.6, 4.0, 1.2, 1], [5.0, 2.3, 3.3, 1.0, 1], [5.6, 2.7, 4.2, 1.3, 1],
+            [5.7, 3.0, 4.2, 1.2, 1], [5.7, 2.9, 4.2, 1.3, 1], [6.2, 2.9, 4.3, 1.3, 1],
+            [5.1, 2.5, 3.0, 1.1, 1], [5.7, 2.8, 4.1, 1.3, 1],
+            
+            // Virginica (2)
+            [6.3, 3.3, 6.0, 2.5, 2], [5.8, 2.7, 5.1, 1.9, 2], [7.1, 3.0, 5.9, 2.1, 2],
+            [6.3, 2.9, 5.6, 1.8, 2], [6.5, 3.0, 5.8, 2.2, 2], [7.6, 3.0, 6.6, 2.1, 2],
+            [4.9, 2.5, 4.5, 1.7, 2], [7.3, 2.9, 6.3, 1.8, 2], [6.7, 2.5, 5.8, 1.8, 2],
+            [7.2, 3.6, 6.1, 2.5, 2], [6.5, 3.2, 5.1, 2.0, 2], [6.4, 2.7, 5.3, 1.9, 2],
+            [6.8, 3.0, 5.5, 2.1, 2], [5.7, 2.5, 5.0, 2.0, 2], [5.8, 2.8, 5.1, 2.4, 2],
+            [6.4, 3.2, 5.3, 2.3, 2], [6.5, 3.0, 5.5, 1.8, 2], [7.7, 3.8, 6.7, 2.2, 2],
+            [7.7, 2.6, 6.9, 2.3, 2], [6.0, 2.2, 5.0, 1.5, 2], [6.9, 3.2, 5.7, 2.3, 2],
+            [5.6, 2.8, 4.9, 2.0, 2], [7.7, 2.8, 6.7, 2.0, 2], [6.3, 2.7, 4.9, 1.8, 2],
+            [6.7, 3.3, 5.7, 2.1, 2], [7.2, 3.2, 6.0, 1.8, 2], [6.2, 2.8, 4.8, 1.8, 2],
+            [6.1, 3.0, 4.9, 1.8, 2], [6.4, 2.8, 5.6, 2.1, 2], [7.2, 3.0, 5.8, 1.6, 2],
+            [7.4, 2.8, 6.1, 1.9, 2], [7.9, 3.8, 6.4, 2.0, 2], [6.4, 2.8, 5.6, 2.2, 2],
+            [6.3, 2.8, 5.1, 1.5, 2], [6.1, 2.6, 5.6, 1.4, 2], [7.7, 3.0, 6.1, 2.3, 2],
+            [6.3, 3.4, 5.6, 2.4, 2], [6.4, 3.1, 5.5, 1.8, 2], [6.0, 3.0, 4.8, 1.8, 2],
+            [6.9, 3.1, 5.4, 2.1, 2], [6.7, 3.1, 5.6, 2.4, 2], [6.9, 3.1, 5.1, 2.3, 2],
+            [5.8, 2.7, 5.1, 1.9, 2], [6.8, 3.2, 5.9, 2.3, 2], [6.7, 3.3, 5.7, 2.5, 2],
+            [6.7, 3.0, 5.2, 2.3, 2], [6.3, 2.5, 5.0, 1.9, 2], [6.5, 3.0, 5.2, 2.0, 2],
+            [6.2, 3.4, 5.4, 2.3, 2], [5.9, 3.0, 5.1, 1.8, 2]
+        ];
+
+        const speciesNames = ['Setosa', 'Versicolor', 'Virginica'];
+        const speciesColors = ['#ff4757', '#2ed573', '#3742fa']; // Red, Green, Blue - more distinct colors
+        const featureNames = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width'];
+
+        // Performance improvement: Memoized distance calculation
+        const distanceCache = new Map();
+
+        function euclideanDistance(point1, point2) {
+            const key = `${point1.join(',')}-${point2.join(',')}`;
+            if (distanceCache.has(key)) return distanceCache.get(key);
+            
+            const distance = Math.sqrt(
+                point1.slice(0, 4).reduce((sum, val, i) => sum + Math.pow(val - point2[i], 2), 0)
+            );
+            distanceCache.set(key, distance);
+            return distance;
+        }
+
+        function knnPredict(trainData, testPoint, k = 5) {
+            const distances = trainData.map((point, idx) => ({
+                distance: euclideanDistance(testPoint, point),
+                species: point[4],
+                point: point,
+                index: idx
+            }));
+            
+            distances.sort((a, b) => a.distance - b.distance);
+            const neighbors = distances.slice(0, k);
+            
+            const votes = neighbors.reduce((acc, neighbor) => {
+                acc[neighbor.species] = (acc[neighbor.species] || 0) + 1;
+                return acc;
+            }, {});
+            
+            const prediction = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
+            
+            return {
+                prediction: parseInt(prediction),
+                neighbors: neighbors,
+                confidence: votes[prediction] / k,
+                votes: votes
+            };
+        }
+
+        // Enhanced LIME explanation with sensitivity analysis
+        function generateLimeExplanation(trainData, testPoint, prediction, k) {
+            const baselineFeatures = [5.8, 3.1, 3.8, 1.2]; // Average values
+            const featureImportances = [];
+            
+            for (let i = 0; i < 4; i++) {
+                // Try both positive and negative perturbations
+                const perturbations = [
+                    baselineFeatures[i],
+                    testPoint[i] * 1.1,
+                    testPoint[i] * 0.9
+                ];
+                
+                let maxImportance = 0;
+                
+                perturbations.forEach(perturbValue => {
+                    const perturbedPoint = [...testPoint];
+                    perturbedPoint[i] = perturbValue;
+                    
+                    const newPrediction = knnPredict(trainData, perturbedPoint, k);
+                    const importanceScore = Math.abs(prediction.confidence - newPrediction.confidence);
+                    maxImportance = Math.max(maxImportance, importanceScore);
+                });
+                
+                featureImportances.push({
+                    feature: featureNames[i],
+                    importance: maxImportance,
+                    value: testPoint[i],
+                    direction: testPoint[i] > baselineFeatures[i] ? 'higher' : 'lower'
+                });
+            }
+            
+            return featureImportances.sort((a, b) => b.importance - a.importance);
+        }
+
+        // Accuracy testing function
+        function runAccuracyTest(k, numSamples = 30) {
+            const testIndices = [];
+            for (let i = 0; i < numSamples; i++) {
+                testIndices.push(Math.floor(Math.random() * 150));
+            }
+            
+            let correct = 0;
+            const results = testIndices.map(idx => {
+                const sample = irisData[idx];
+                const testPoint = sample.slice(0, 4);
+                const actualSpecies = sample[4];
+                
+                // Use all other data points for training
+                const trainData = irisData.filter((_, trainIdx) => trainIdx !== idx);
+                const prediction = knnPredict(trainData, testPoint, k);
+                
+                const isCorrect = prediction.prediction === actualSpecies;
+                if (isCorrect) correct++;
+                
+                return {
+                    actual: actualSpecies,
+                    predicted: prediction.prediction,
+                    correct: isCorrect,
+                    confidence: prediction.confidence
+                };
+            });
+            
+            return {
+                accuracy: correct / numSamples,
+                results: results,
+                bySpecies: {
+                    0: results.filter(r => r.actual === 0),
+                    1: results.filter(r => r.actual === 1), 
+                    2: results.filter(r => r.actual === 2)
+                }
+            };
+        }
+
+        const ConfidenceBar = ({ confidence, species }) => {
+            const color = speciesColors[species];
+            return (
+                <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                    <div 
+                        className="h-4 rounded-full transition-all duration-500 flex items-center justify-center text-xs text-white font-medium"
+                        style={{ 
+                            width: `${confidence * 100}%`, 
+                            backgroundColor: color,
+                            minWidth: confidence > 0.1 ? 'auto' : '20px'
+                        }}
+                    >
+                        {(confidence * 100).toFixed(1)}%
+                    </div>
+                </div>
+            );
+        };
+
+        const FeatureImportanceChart = ({ explanation }) => {
+            const maxImportance = Math.max(...explanation.map(exp => exp.importance));
+            const chartHeight = 120;
+            const barHeight = 20;
+            const spacing = 5;
+            
+            return (
+                <div className="bg-gray-50 p-3 rounded">
+                    <svg width="100%" height={chartHeight} viewBox={`0 0 200 ${chartHeight}`}>
+                        {explanation.map((exp, i) => {
+                            const barWidth = maxImportance > 0 ? (exp.importance / maxImportance) * 150 : 0;
+                            const y = i * (barHeight + spacing) + 10;
+                            
+                            return (
+                                <g key={i}>
+                                    {/* Bar */}
+                                    <rect
+                                        x="45"
+                                        y={y}
+                                        width={barWidth}
+                                        height={barHeight}
+                                        fill="#8884d8"
+                                        opacity="0.8"
+                                    />
+                                    
+                                    {/* Feature label */}
+                                    <text
+                                        x="40"
+                                        y={y + barHeight/2 + 3}
+                                        textAnchor="end"
+                                        fontSize="9"
+                                        fill="#666"
+                                    >
+                                        {exp.feature.split(' ').map(word => word[0]).join('')}
+                                    </text>
+                                    
+                                    {/* Value label */}
+                                    <text
+                                        x={50 + barWidth}
+                                        y={y + barHeight/2 + 3}
+                                        fontSize="8"
+                                        fill="#333"
+                                    >
+                                        {exp.importance.toFixed(3)}
+                                    </text>
+                                </g>
+                            );
+                        })}
+                    </svg>
+                </div>
+            );
+        };
+
+        const KNNIrisPredictor = () => {
+            const [selectedSamples, setSelectedSamples] = useState([]);
+            const [selectedIndices, setSelectedIndices] = useState([]);
+            const [predictions, setPredictions] = useState([]);
+            const [isRunning, setIsRunning] = useState(false);
+            const [currentView, setCurrentView] = useState('sepal');
+            const [kValue, setKValue] = useState(5);
+            const [showNeighbors, setShowNeighbors] = useState(true);
+            const [accuracyTest, setAccuracyTest] = useState(null);
+            const [isTestingAccuracy, setIsTestingAccuracy] = useState(false);
+
+            // Generate random samples on component mount
+            useEffect(() => {
+                generateRandomSamples();
+            }, []);
+
+            const generateRandomSamples = () => {
+                const samples = [];
+                const indices = [];
+                const speciesIndices = [
+                    Math.floor(Math.random() * 50), // Setosa
+                    50 + Math.floor(Math.random() * 50), // Versicolor  
+                    100 + Math.floor(Math.random() * 50) // Virginica
+                ];
+                
+                // Add one extra random sample
+                speciesIndices.push(Math.floor(Math.random() * 150));
+                
+                speciesIndices.forEach(idx => {
+                    samples.push(irisData[idx]);
+                    indices.push(idx);
+                });
+                
+                setSelectedSamples(samples);
+                setSelectedIndices(indices);
+                setPredictions([]);
+                setAccuracyTest(null);
+            };
+
+            const runPredictions = async () => {
+                setIsRunning(true);
+                const results = [];
+                
+                for (let i = 0; i < selectedSamples.length; i++) {
+                    const sample = selectedSamples[i];
+                    const sampleIndex = selectedIndices[i];
+                    const testPoint = sample.slice(0, 4);
+                    
+                    // Fixed: Use index-based filtering to properly exclude sample
+                    const trainData = irisData.filter((_, idx) => idx !== sampleIndex);
+                    
+                    const prediction = knnPredict(trainData, testPoint, kValue);
+                    const explanation = generateLimeExplanation(trainData, testPoint, prediction, kValue);
+                    
+                    results.push({
+                        sample: testPoint,
+                        actualSpecies: sample[4],
+                        prediction,
+                        explanation,
+                        index: i,
+                        isCorrect: prediction.prediction === sample[4]
+                    });
+                    
+                    // Animate the predictions appearing
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    setPredictions([...results]);
+                }
+                
+                setIsRunning(false);
+            };
+
+            const runAccuracyTestHandler = async () => {
+                setIsTestingAccuracy(true);
+                const results = runAccuracyTest(kValue, 30);
+                setAccuracyTest(results);
+                setIsTestingAccuracy(false);
+            };
+
+            const getScatterData = () => {
+                const xIndex = currentView === 'sepal' ? 0 : 2;
+                const yIndex = currentView === 'sepal' ? 1 : 3;
+                
+                const data = irisData.map((point, idx) => ({
+                    x: point[xIndex],
+                    y: point[yIndex],
+                    species: point[4],
+                    color: speciesColors[point[4]],
+                    isTraining: true,
+                    size: 4,
+                    name: `${speciesNames[point[4]]} (${point[xIndex]}, ${point[yIndex]})`
+                }));
+                
+                // Add selected samples
+                selectedSamples.forEach((sample, idx) => {
+                    data.push({
+                        x: sample[xIndex],
+                        y: sample[yIndex],
+                        species: sample[4],
+                        color: '#000',
+                        isTraining: false,
+                        size: 8,
+                        isSelected: true,
+                        index: idx,
+                        name: `Test Sample ${idx + 1}: ${speciesNames[sample[4]]} (${sample[xIndex]}, ${sample[yIndex]})`
+                    });
+                });
+                
+                // Add nearest neighbors if predictions exist and neighbors are shown
+                if (showNeighbors) {
+                    predictions.forEach((pred, predIdx) => {
+                        pred.prediction.neighbors.forEach((neighbor, nIdx) => {
+                            if (nIdx < kValue) {
+                                data.push({
+                                    x: neighbor.point[xIndex],
+                                    y: neighbor.point[yIndex],
+                                    species: neighbor.species,
+                                    color: speciesColors[neighbor.species],
+                                    isTraining: false,
+                                    size: 6,
+                                    isNeighbor: true,
+                                    neighborOf: predIdx,
+                                    opacity: 0.8 - (nIdx * 0.15),
+                                    name: `Neighbor ${nIdx + 1} of Sample ${predIdx + 1}: ${speciesNames[neighbor.species]} (dist: ${neighbor.distance.toFixed(2)})`
+                                });
+                            }
+                        });
+                    });
+                }
+                
+                return data;
+            };
+
+            const scatterData = useMemo(() => getScatterData(), [currentView, selectedSamples, predictions, showNeighbors, kValue]);
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-6">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                                KNN Iris Predictor with LIME Explanations
+                            </h1>
+                        </div>
+
+                        <div className="grid lg:grid-cols-3 gap-6">
+                            {/* Controls Panel */}
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-2xl shadow-xl p-6">
+                                    <h2 className="text-2xl font-bold mb-4 flex items-center">
+                                        <span className="ml-2">Advanced Controls</span>
+                                    </h2>
+                                    
+                                    <div className="space-y-4">
+                                        {/* K Value Slider */}
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">
+                                                K Value: {kValue}
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="15"
+                                                value={kValue}
+                                                onChange={(e) => setKValue(parseInt(e.target.value))}
+                                                className="w-full"
+                                                disabled={isRunning}
+                                            />
+                                        </div>
+
+                                        {/* Control Buttons */}
+                                        <div className="space-y-2">
+                                            <button
+                                                onClick={generateRandomSamples}
+                                                disabled={isRunning}
+                                                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center disabled:opacity-50"
+                                            >
+                                                <span className="ml-2">New Random Samples</span>
+                                            </button>
+                                            
+                                            <button
+                                                onClick={runPredictions}
+                                                disabled={isRunning || selectedSamples.length === 0}
+                                                className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white px-4 py-3 rounded-lg hover:from-green-700 hover:to-teal-700 transition-all duration-200 flex items-center justify-center disabled:opacity-50"
+                                            >
+                                                <span className="ml-2">
+                                                    {isRunning ? 'Analyzing...' : `Run KNN (k=${kValue}) + LIME`}
+                                                </span>
+                                            </button>
+
+                                            <button
+                                                onClick={runAccuracyTestHandler}
+                                                disabled={isTestingAccuracy}
+                                                className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white px-4 py-2 rounded-lg hover:from-orange-700 hover:to-red-700 transition-all duration-200 flex items-center justify-center disabled:opacity-50"
+                                            >
+                                                <span className="ml-2">
+                                                    {isTestingAccuracy ? 'Testing...' : 'Accuracy Test'}
+                                                </span>
+                                            </button>
+                                        </div>
+
+                                        {/* View Toggle */}
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setCurrentView('sepal')}
+                                                className={`flex-1 px-4 py-2 rounded-lg transition-all ${
+                                                    currentView === 'sepal' 
+                                                        ? 'bg-blue-600 text-white' 
+                                                        : 'bg-gray-100 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                Sepal View
+                                            </button>
+                                            <button
+                                                onClick={() => setCurrentView('petal')}
+                                                className={`flex-1 px-4 py-2 rounded-lg transition-all ${
+                                                    currentView === 'petal' 
+                                                        ? 'bg-blue-600 text-white' 
+                                                        : 'bg-gray-100 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                Petal View
+                                            </button>
+                                        </div>
+
+                                        {/* Neighbors Toggle */}
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={showNeighbors}
+                                                onChange={(e) => setShowNeighbors(e.target.checked)}
+                                                className="w-4 h-4 text-blue-600"
+                                            />
+                                            <span className="text-sm">Show Nearest Neighbors</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Accuracy Test Results */}
+                                {accuracyTest && (
+                                    <div className="bg-white rounded-2xl shadow-xl p-6">
+                                        <h2 className="text-2xl font-bold mb-4 flex items-center">
+                                            <span className="ml-2">Accuracy Test Results</span>
+                                        </h2>
+                                        
+                                        <div className="space-y-4">
+                                            <div className="text-center">
+                                                <div className="text-3xl font-bold text-green-600">
+                                                    {(accuracyTest.accuracy * 100).toFixed(1)}%
+                                                </div>
+                                                <div className="text-sm text-gray-600">Overall Accuracy (k={kValue})</div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                {speciesNames.map((species, idx) => {
+                                                    const speciesResults = accuracyTest.bySpecies[idx];
+                                                    const speciesAccuracy = speciesResults.length > 0 ? 
+                                                        speciesResults.filter(r => r.correct).length / speciesResults.length : 0;
+                                                    
+                                                    return (
+                                                        <div key={idx} className="flex items-center justify-between p-2 rounded" style={{backgroundColor: `${speciesColors[idx]}20`}}>
+                                                            <span className="font-medium" style={{color: speciesColors[idx]}}>{species}</span>
+                                                            <span className="text-sm">{(speciesAccuracy * 100).toFixed(1)}% ({speciesResults.filter(r => r.correct).length}/{speciesResults.length})</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Visualization Panel */}
+                            <div className="lg:col-span-2 space-y-6">
+                                <div className="bg-white rounded-2xl shadow-xl p-6">
+                                    <h2 className="text-2xl font-bold mb-4 flex items-center">
+                                        <span className="ml-2">Interactive Scatter Plot</span>
+                                    </h2>
+                                    
+                                    <div className="mb-4">
+                                        <div className="text-sm text-gray-600 mb-3">
+                                            {currentView === 'sepal' ? 'Sepal Length vs Sepal Width' : 'Petal Length vs Petal Width'}
+                                        </div>
+                                        
+                                        {/* Enhanced Legend */}
+                                        <div className="bg-gray-50 p-3 rounded-lg">
+                                            <div className="text-xs font-medium text-gray-700 mb-2">Legend:</div>
+                                            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                                                <div className="flex items-center">
+                                                    <div className="w-3 h-3 rounded mr-2" style={{backgroundColor: speciesColors[0]}}></div>
+                                                    Setosa (Red)
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-3 h-3 rounded mr-2" style={{backgroundColor: speciesColors[1]}}></div>
+                                                    Versicolor (Green)
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-3 h-3 rounded mr-2" style={{backgroundColor: speciesColors[2]}}></div>
+                                                    Virginica (Blue)
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-3 h-3 bg-black rounded mr-2"></div>
+                                                    Test Samples
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-3 h-3 border-2 border-gray-400 rounded mr-2"></div>
+                                                    Neighbors
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative">
+                                        <svg width="100%" height="400" viewBox="0 0 500 400" className="border rounded-lg bg-gray-50">
+                                            {scatterData.map((point, idx) => {
+                                                // Dynamic scaling based on current view
+                                                let x, y;
+                                                if (currentView === 'sepal') {
+                                                    // Sepal: Length 4-8, Width 2-4.5
+                                                    x = 50 + ((point.x - 4) / 4) * 400;
+                                                    y = 350 - ((point.y - 2) / 2.5) * 300;
+                                                } else {
+                                                    // Petal: Length 1-7, Width 0-2.5
+                                                    x = 50 + ((point.x - 1) / 6) * 400;
+                                                    y = 350 - ((point.y - 0) / 2.5) * 300;
+                                                }
+                                                
+                                                return (
+                                                    <g key={idx}>
+                                                        {point.isNeighbor && showNeighbors && (
+                                                            <line
+                                                                x1={x}
+                                                                y1={y}
+                                                                x2={(() => {
+                                                                    const neighborSample = selectedSamples[point.neighborOf];
+                                                                    const neighborX = currentView === 'sepal' ? neighborSample[0] : neighborSample[2];
+                                                                    return currentView === 'sepal' ? 
+                                                                        50 + ((neighborX - 4) / 4) * 400 :
+                                                                        50 + ((neighborX - 1) / 6) * 400;
+                                                                })()}
+                                                                y2={(() => {
+                                                                    const neighborSample = selectedSamples[point.neighborOf];
+                                                                    const neighborY = currentView === 'sepal' ? neighborSample[1] : neighborSample[3];
+                                                                    return currentView === 'sepal' ? 
+                                                                        350 - ((neighborY - 2) / 2.5) * 300 :
+                                                                        350 - ((neighborY - 0) / 2.5) * 300;
+                                                                })()}
+                                                                stroke={point.color}
+                                                                strokeWidth="1"
+                                                                strokeOpacity="0.3"
+                                                                strokeDasharray="2,2"
+                                                            />
+                                                        )}
+                                                        
+                                                        <circle
+                                                            cx={x}
+                                                            cy={y}
+                                                            r={point.size}
+                                                            fill={point.color}
+                                                            fillOpacity={point.opacity || (point.isSelected ? 1 : 0.7)}
+                                                            stroke={point.isSelected ? '#fff' : (point.isNeighbor && showNeighbors ? '#333' : 'none')}
+                                                            strokeWidth={point.isSelected ? 3 : (point.isNeighbor ? 2 : 0)}
+                                                        >
+                                                            <title>{point.name}</title>
+                                                        </circle>
+                                                        
+                                                        {point.isSelected && (
+                                                            <text
+                                                                x={x}
+                                                                y={y - 15}
+                                                                textAnchor="middle"
+                                                                fontSize="10"
+                                                                fontWeight="bold"
+                                                                fill="#333"
+                                                            >
+                                                                S{point.index + 1}
+                                                            </text>
+                                                        )}
+                                                    </g>
+                                                );
+                                            })}
+                                            
+                                            {/* Axes */}
+                                            <line x1="50" y1="350" x2="450" y2="350" stroke="#333" strokeWidth="2"/>
+                                            <line x1="50" y1="350" x2="50" y2="50" stroke="#333" strokeWidth="2"/>
+                                            
+                                            {/* Dynamic axis labels and scales */}
+                                            {currentView === 'sepal' ? (
+                                                <>
+                                                    {/* Sepal X-axis ticks */}
+                                                    <text x="50" y="370" textAnchor="middle" fontSize="10" fill="#666">4</text>
+                                                    <text x="150" y="370" textAnchor="middle" fontSize="10" fill="#666">5</text>
+                                                    <text x="250" y="370" textAnchor="middle" fontSize="10" fill="#666">6</text>
+                                                    <text x="350" y="370" textAnchor="middle" fontSize="10" fill="#666">7</text>
+                                                    <text x="450" y="370" textAnchor="middle" fontSize="10" fill="#666">8</text>
+                                                    
+                                                    {/* Sepal Y-axis ticks */}
+                                                    <text x="35" y="355" textAnchor="end" fontSize="10" fill="#666">2</text>
+                                                    <text x="35" y="295" textAnchor="end" fontSize="10" fill="#666">2.5</text>
+                                                    <text x="35" y="235" textAnchor="end" fontSize="10" fill="#666">3</text>
+                                                    <text x="35" y="175" textAnchor="end" fontSize="10" fill="#666">3.5</text>
+                                                    <text x="35" y="115" textAnchor="end" fontSize="10" fill="#666">4</text>
+                                                    <text x="35" y="55" textAnchor="end" fontSize="10" fill="#666">4.5</text>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {/* Petal X-axis ticks */}
+                                                    <text x="50" y="370" textAnchor="middle" fontSize="10" fill="#666">1</text>
+                                                    <text x="117" y="370" textAnchor="middle" fontSize="10" fill="#666">2</text>
+                                                    <text x="183" y="370" textAnchor="middle" fontSize="10" fill="#666">3</text>
+                                                    <text x="250" y="370" textAnchor="middle" fontSize="10" fill="#666">4</text>
+                                                    <text x="317" y="370" textAnchor="middle" fontSize="10" fill="#666">5</text>
+                                                    <text x="383" y="370" textAnchor="middle" fontSize="10" fill="#666">6</text>
+                                                    <text x="450" y="370" textAnchor="middle" fontSize="10" fill="#666">7</text>
+                                                    
+                                                    {/* Petal Y-axis ticks */}
+                                                    <text x="35" y="355" textAnchor="end" fontSize="10" fill="#666">0</text>
+                                                    <text x="35" y="295" textAnchor="end" fontSize="10" fill="#666">0.5</text>
+                                                    <text x="35" y="235" textAnchor="end" fontSize="10" fill="#666">1</text>
+                                                    <text x="35" y="175" textAnchor="end" fontSize="10" fill="#666">1.5</text>
+                                                    <text x="35" y="115" textAnchor="end" fontSize="10" fill="#666">2</text>
+                                                    <text x="35" y="55" textAnchor="end" fontSize="10" fill="#666">2.5</text>
+                                                </>
+                                            )}
+                                            
+                                            {/* Axis labels */}
+                                            <text x="250" y="390" textAnchor="middle" fontSize="12" fill="#666">
+                                                {currentView === 'sepal' ? 'Sepal Length (cm)' : 'Petal Length (cm)'}
+                                            </text>
+                                            <text x="20" y="200" textAnchor="middle" fontSize="12" fill="#666" transform="rotate(-90 20 200)">
+                                                {currentView === 'sepal' ? 'Sepal Width (cm)' : 'Petal Width (cm)'}
+                                            </text>
+                                        </svg>
+                                    </div>
+
+                                    {predictions.length > 0 && (
+                                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                                            <div className="text-sm text-gray-700">
+                                                <strong>Algorithm Info:</strong> Using K-Nearest Neighbors (k={kValue}) with Euclidean distance and memoized calculations. 
+                                                LIME explanations show feature importance through sensitivity analysis with ±10% perturbations.
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Predictions Results */}
+                                {predictions.length > 0 && (
+                                    <div className="bg-white rounded-2xl shadow-xl p-6">
+                                        <h2 className="text-2xl font-bold mb-4 flex items-center">
+                                            <span className="ml-2">Prediction Results</span>
+                                        </h2>
+                                        
+                                        <div className="grid gap-4">
+                                            {predictions.map((pred, idx) => (
+                                                <div key={idx} className={`border-l-4 pl-4 py-4 bg-gray-50 rounded-r-lg ${
+                                                    pred.isCorrect ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'
+                                                }`}>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span className="font-semibold text-lg">Sample {idx + 1} {pred.isCorrect ? '✅' : '❌'}</span>
+                                                        <div className="flex items-center space-x-3">
+                                                            <div className="text-sm">
+                                                                <span className="text-gray-600">Actual: </span>
+                                                                <span className="font-bold px-2 py-1 rounded text-white text-xs" style={{backgroundColor: speciesColors[pred.actualSpecies]}}>
+                                                                    {speciesNames[pred.actualSpecies]}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-sm">
+                                                                <span className="text-gray-600">Predicted: </span>
+                                                                <span className="font-bold px-2 py-1 rounded text-white text-xs" style={{backgroundColor: speciesColors[pred.prediction.prediction]}}>
+                                                                    {speciesNames[pred.prediction.prediction]}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Enhanced Confidence Visualization */}
+                                                    <div className="mb-3">
+                                                        <div className="text-sm font-medium text-gray-700 mb-2">Prediction Confidence:</div>
+                                                        <ConfidenceBar 
+                                                            confidence={pred.prediction.confidence} 
+                                                            species={pred.prediction.prediction} 
+                                                        />
+                                                    </div>
+                                                    
+                                                    {/* Feature Importance Chart */}
+                                                    <div className="grid md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-700 mb-2">Feature Importance (LIME):</div>
+                                                            <div className="space-y-1">
+                                                                {pred.explanation.slice(0, 4).map((exp, i) => (
+                                                                    <div key={i} className="flex justify-between items-center text-xs bg-white px-3 py-2 rounded border">
+                                                                        <span className="font-medium">{exp.feature}:</span> 
+                                                                        <span className="text-blue-600 font-mono">{exp.importance.toFixed(4)}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-700 mb-2">Importance Chart:</div>
+                                                            <FeatureImportanceChart explanation={pred.explanation} />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Voting Details */}
+                                                    <div className="mt-3 pt-3 border-t">
+                                                        <div className="text-sm font-medium text-gray-700 mb-2">Neighbor Votes (k={kValue}):</div>
+                                                        <div className="flex space-x-4">
+                                                            {Object.entries(pred.prediction.votes).map(([species, votes]) => (
+                                                                <div key={species} className="flex items-center space-x-1">
+                                                                    <div className="w-3 h-3 rounded" style={{backgroundColor: speciesColors[species]}}></div>
+                                                                    <span className="text-xs">{speciesNames[species]}: {votes}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="mt-8 text-center">
+                            <div className="bg-white rounded-xl shadow-lg p-6">
+                                <h3 className="text-lg font-bold mb-3">🏆 Production-Ready Features</h3>
+                                <div className="grid md:grid-cols-4 gap-4 text-sm">
+                                    <div className="p-3 bg-purple-50 rounded-lg">
+                                        <div className="font-semibold text-purple-700">Dynamic KNN</div>
+                                        <div className="text-gray-600">Adjustable k=1-15 with memoized distances</div>
+                                    </div>
+                                    <div className="p-3 bg-green-50 rounded-lg">
+                                        <div className="font-semibold text-green-700">Enhanced LIME</div>
+                                        <div className="text-gray-600">Sensitivity analysis with ±10% perturbations</div>
+                                    </div>
+                                    <div className="p-3 bg-blue-50 rounded-lg">
+                                        <div className="font-semibold text-blue-700">Accuracy Testing</div>
+                                        <div className="text-gray-600">30-sample cross-validation by species</div>
+                                    </div>
+                                    <div className="p-3 bg-orange-50 rounded-lg">
+                                        <div className="font-semibold text-orange-700">Interactive Charts</div>
+                                        <div className="text-gray-600">Feature importance bar charts & tooltips</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<KNNIrisPredictor />, document.getElementById('root'));
+    </script>
+</body>
+</html>
