@@ -134,33 +134,59 @@
 
         // Enhanced LIME explanation with sensitivity analysis
         function generateLimeExplanation(trainData, testPoint, prediction, k) {
-            const baselineFeatures = [5.8, 3.1, 3.8, 1.2]; // Average values
             const featureImportances = [];
             
+            // Calculate feature ranges from training data
+            const featureRanges = [
+                { min: 4.3, max: 7.9 }, // Sepal Length
+                { min: 2.0, max: 4.4 }, // Sepal Width
+                { min: 1.0, max: 6.9 }, // Petal Length
+                { min: 0.1, max: 2.5 }  // Petal Width
+            ];
+            
             for (let i = 0; i < 4; i++) {
-                // Try both positive and negative perturbations
-                const perturbations = [
-                    baselineFeatures[i],
-                    testPoint[i] * 1.1,
-                    testPoint[i] * 0.9
+                const range = featureRanges[i];
+                let totalImportance = 0;
+                let numTests = 0;
+                
+                // Test multiple larger perturbations across the feature range
+                const perturbationValues = [
+                    testPoint[i] - (range.max - range.min) * 0.15,
+                    testPoint[i] - (range.max - range.min) * 0.10,
+                    testPoint[i] - (range.max - range.min) * 0.05,
+                    testPoint[i] + (range.max - range.min) * 0.05,
+                    testPoint[i] + (range.max - range.min) * 0.10,
+                    testPoint[i] + (range.max - range.min) * 0.15,
+                    range.min + (range.max - range.min) * 0.25,
+                    range.min + (range.max - range.min) * 0.75
                 ];
                 
-                let maxImportance = 0;
-                
-                perturbations.forEach(perturbValue => {
-                    const perturbedPoint = [...testPoint];
-                    perturbedPoint[i] = perturbValue;
-                    
-                    const newPrediction = knnPredict(trainData, perturbedPoint, k);
-                    const importanceScore = Math.abs(prediction.confidence - newPrediction.confidence);
-                    maxImportance = Math.max(maxImportance, importanceScore);
+                perturbationValues.forEach(perturbValue => {
+                    // Keep perturbation within valid range
+                    if (perturbValue >= range.min && perturbValue <= range.max) {
+                        const perturbedPoint = [...testPoint];
+                        perturbedPoint[i] = perturbValue;
+                        
+                        const newPrediction = knnPredict(trainData, perturbedPoint, k);
+                        
+                        // Measure both confidence change and prediction change
+                        const confidenceChange = Math.abs(prediction.confidence - newPrediction.confidence);
+                        const predictionChange = prediction.prediction !== newPrediction.prediction ? 0.5 : 0;
+                        
+                        totalImportance += confidenceChange + predictionChange;
+                        numTests++;
+                    }
                 });
+                
+                // Average importance with minimum threshold
+                const avgImportance = numTests > 0 ? totalImportance / numTests : 0;
+                const importance = Math.max(avgImportance, 0.001); // Ensure non-zero minimum
                 
                 featureImportances.push({
                     feature: featureNames[i],
-                    importance: maxImportance,
+                    importance: importance,
                     value: testPoint[i],
-                    direction: testPoint[i] > baselineFeatures[i] ? 'higher' : 'lower'
+                    direction: testPoint[i] > (range.min + range.max) / 2 ? 'higher' : 'lower'
                 });
             }
             
